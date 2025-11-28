@@ -1,5 +1,5 @@
 import axios from "axios";
-import { buildUrl } from "../../api/http";
+import { buildUrl } from "../../../api/http";
 
 export async function sendChatMessage(userId: string, message: string): Promise<string> {
   const formData = new FormData();
