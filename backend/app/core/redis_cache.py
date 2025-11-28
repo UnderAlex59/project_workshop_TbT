@@ -7,7 +7,7 @@ import redis
 
 class RedisCache:
     def __init__(self):
-        url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        url = os.getenv("REDIS_URL", "redis://redis:6379/0")
         self.ttl = int(os.getenv("REDIS_TTL", 3600))
         try:
             self.client = redis.Redis.from_url(url, decode_responses=True)
