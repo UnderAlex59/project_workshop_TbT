@@ -1,19 +1,30 @@
+import random
+import time
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.dependencies import get_current_user
-from app.core.security import create_access_token
+from app.core.security import create_access_token, verify_token
 from app.models.user import User
-from app.schemas.user import AuthResponse, UserCreate, UserLogin, UserOut, UserUpdate
+from app.repositories import user_repository
+from app.schemas.user import (
+    AuthResponse,
+    UserCreate,
+    UserIdentityResponse,
+    UserLogin,
+    UserOut,
+    UserUpdate,
+)
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 def get_db():
@@ -22,6 +33,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def _is_valid_anonymous_id(value: str) -> bool:
+    return value.isdigit() and 6 <= len(value) <= 40
+
+
+def generate_anonymous_user_id() -> str:
+    timestamp_part = str(int(time.time() * 1000))
+    random_part = "".join(str(random.randint(0, 9)) for _ in range(6))
+    return f"{timestamp_part}{random_part}"
 
 
 # Публичные эндпоинты (не требуют аутентификации)
@@ -66,6 +87,52 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
             )
         else:
             raise e
+
+
+
+# ?????????? ????????????? ????????????, ???? ???? ?? ?? ???????????
+@router.get("/identity", response_model=UserIdentityResponse)
+def get_user_identity(
+    current_id: str | None = Query(
+        None, description="Existing anonymous user identifier to reuse if still valid"
+    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
+    db: Session = Depends(get_db),
+):
+    """
+    Resolve a stable user identifier for the client. If a valid JWT is provided,
+    the registered user id is returned, otherwise a numeric anonymous id is reused or generated.
+    """
+    if credentials and credentials.credentials:
+        payload = verify_token(credentials.credentials)
+        user_id = payload.get("user_id") if payload else None
+        username = payload.get("sub") if payload else None
+
+        if user_id is not None:
+            try:
+                user_id_int = int(user_id)
+            except (TypeError, ValueError):
+                user_id_int = None
+
+            user = (
+                user_repository.get_user_by_id(db, user_id_int)
+                if user_id_int is not None
+                else None
+            )
+            if user and user.username == username and user.is_active:
+                return UserIdentityResponse(
+                    user_id=str(user.id),
+                    kind="registered",
+                    registered_user_id=user.id,
+                )
+
+    candidate = current_id if current_id and _is_valid_anonymous_id(current_id) else None
+    anonymous_id = candidate or generate_anonymous_user_id()
+
+    return UserIdentityResponse(
+        user_id=anonymous_id, kind="anonymous", registered_user_id=None
+    )
+
 
 
 # 🔐 ЛИЧНЫЕ эндпоинты (работают с текущим пользователем)

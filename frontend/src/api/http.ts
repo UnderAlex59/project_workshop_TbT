@@ -1,4 +1,5 @@
 const DEFAULT_ORIGIN = "http://localhost";
+const DEFAULT_API_BASE = "/api";
 
 export class ApiError extends Error {
   status: number;
@@ -11,17 +12,15 @@ export class ApiError extends Error {
 }
 
 export const API_BASE = (() => {
-  const configured = (import.meta as any)?.env?.VITE_API_URL;
-  if (configured) {
+  const configured =
+    (import.meta as any)?.env?.VITE_API_URL ||
+    (import.meta as any)?.env?.VITE_API_BASE_URL;
+
+  if (configured && String(configured).trim().length > 0) {
     return String(configured).replace(/\/+$/, "");
   }
-  if (import.meta.env?.DEV) {
-    return "/api";
-  }
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-  return "";
+
+  return DEFAULT_API_BASE;
 })();
 
 export function buildUrl(

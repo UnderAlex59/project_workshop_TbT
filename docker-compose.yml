@@ -61,8 +61,9 @@ services:
     depends_on:
       - backend
     environment:
-      - VITE_API_URL=http://backend:8000
-      - VITE_API_BASE_URL=http://backend:8000
+      - VITE_API_URL=/api
+      - VITE_API_BASE_URL=/api
+      - VITE_API_PROXY_TARGET=http://backend:8000
     ports:
       - "5173:5173"
     volumes:
